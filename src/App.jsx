@@ -3,7 +3,10 @@ import { useState, useEffect } from 'react'
 import { auth } from './firebase'
 import { onAuthStateChanged, signOut, updateProfile } from 'firebase/auth'
 import Login from './pages/Login'
+import TurnierErstellen from './pages/TurnierErstellen'
+import TurnierDetail from './pages/TurnierDetail'
 import './App.css'
+import { db } from './firebase'
 
 export function PageHeader({ titel, zurueck }) {
   const navigate = useNavigate()
@@ -77,14 +80,47 @@ function Home({ nutzer }) {
 
 function Turniere() {
   const navigate = useNavigate()
+  const [turniere, setTurniere] = useState([])
+  const [laden, setLaden] = useState(true)
+
+  useEffect(() => {
+    async function laden() {
+      const { collection, getDocs, orderBy, query } = await import('firebase/firestore')
+      const q = query(collection(db, 'turniere'), orderBy('erstelltAm', 'desc'))
+      const snap = await getDocs(q)
+      setTurniere(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      setLaden(false)
+    }
+    laden()
+  }, [])
+
+  const formatLabel = { stableford: 'Stableford', strokeplay: 'Strokeplay', scramble: 'Scramble' }
+
   return (
     <div className="page">
       <PageHeader titel="Turniere" zurueck="/" />
-      <div className="empty-state">
-        <div className="empty-icon">🏆</div>
-        <h3>Noch keine Turniere</h3>
-        <p>Erstelle ein Turnier und lade deine Freunde ein.</p>
-      </div>
+      {laden ? (
+        <div className="empty-state"><p>Lädt...</p></div>
+      ) : turniere.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-icon">🏆</div>
+          <h3>Noch keine Turniere</h3>
+          <p>Erstelle ein Turnier und lade deine Freunde ein.</p>
+        </div>
+      ) : (
+        <div className="card-list">
+          {turniere.map(t => (
+            <div key={t.id} className="list-item" onClick={() => navigate(`/turnier/${t.id}`)}>
+              <div className="list-icon">🏆</div>
+              <div className="list-body">
+                <div className="list-title">{t.name}</div>
+                <div className="list-sub">{t.datum} · {formatLabel[t.format]} · {t.spieler?.length || 0} Spieler</div>
+              </div>
+              <span className={`badge ${t.status === 'offen' ? 'badge-green' : 'badge-amber'}`}>{t.status}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <button className="fab" onClick={() => navigate('/turnier-erstellen')}>+</button>
     </div>
   )
@@ -210,11 +246,13 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home nutzer={nutzer} />} />
         <Route path="/turniere" element={<Turniere />} />
+        <Route path="/turnier-erstellen" element={<TurnierErstellen />} />
         <Route path="/rangliste" element={<Rangliste />} />
         <Route path="/runden" element={<MeineRunden />} />
         <Route path="/statistiken" element={<Statistiken />} />
         <Route path="/plaetze" element={<Plaetze />} />
         <Route path="/profil" element={<Profil nutzer={nutzer} />} />
+        <Route path="/turnier/:id" element={<TurnierDetail />} />
       </Routes>
     </BrowserRouter>
   )
