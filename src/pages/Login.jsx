@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { auth } from '../firebase'
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
 
@@ -27,6 +28,7 @@ export default function Login() {
         'auth/user-not-found': 'Kein Konto mit dieser E-Mail gefunden.',
         'auth/email-already-in-use': 'Diese E-Mail ist bereits registriert.',
         'auth/weak-password': 'Passwort muss mindestens 6 Zeichen haben.',
+        'auth/invalid-credential': 'E-Mail oder Passwort falsch.',
       }
       setFehler(meldungen[e.code] || 'Fehler: ' + e.message)
     }

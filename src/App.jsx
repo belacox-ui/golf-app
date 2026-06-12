@@ -1,12 +1,13 @@
 import { BrowserRouter, Routes, Route, NavLink, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import { auth } from './firebase'
+import { auth, db } from './firebase'
 import { onAuthStateChanged, signOut, updateProfile } from 'firebase/auth'
+import { collection, getDocs, orderBy, query } from 'firebase/firestore'
 import Login from './pages/Login'
 import TurnierErstellen from './pages/TurnierErstellen'
 import TurnierDetail from './pages/TurnierDetail'
+import TurnierBeitreten from './pages/TurnierBeitreten'
 import './App.css'
-import { db } from './firebase'
 
 export function PageHeader({ titel, zurueck }) {
   const navigate = useNavigate()
@@ -84,14 +85,13 @@ function Turniere() {
   const [laden, setLaden] = useState(true)
 
   useEffect(() => {
-    async function laden() {
-      const { collection, getDocs, orderBy, query } = await import('firebase/firestore')
+    async function load() {
       const q = query(collection(db, 'turniere'), orderBy('erstelltAm', 'desc'))
       const snap = await getDocs(q)
       setTurniere(snap.docs.map(d => ({ id: d.id, ...d.data() })))
       setLaden(false)
     }
-    laden()
+    load()
   }, [])
 
   const formatLabel = { stableford: 'Stableford', strokeplay: 'Strokeplay', scramble: 'Scramble' }
@@ -229,11 +229,27 @@ export default function App() {
   const [nutzer, setNutzer] = useState(undefined)
 
   useEffect(() => {
-    return onAuthStateChanged(auth, u => setNutzer(u))
+    return onAuthStateChanged(auth, u => {
+      setNutzer(u)
+      if (u) {
+        const ziel = sessionStorage.getItem('nachLogin')
+        if (ziel) {
+          sessionStorage.removeItem('nachLogin')
+          window.location.href = ziel
+        }
+      }
+    })
   }, [])
 
   if (nutzer === undefined) return null
-  if (!nutzer) return <Login />
+
+  if (!nutzer) {
+    const ziel = window.location.pathname
+    if (ziel !== '/' && ziel !== '') {
+      sessionStorage.setItem('nachLogin', ziel)
+    }
+    return <Login />
+  }
 
   return (
     <BrowserRouter>
@@ -247,12 +263,13 @@ export default function App() {
         <Route path="/" element={<Home nutzer={nutzer} />} />
         <Route path="/turniere" element={<Turniere />} />
         <Route path="/turnier-erstellen" element={<TurnierErstellen />} />
+        <Route path="/turnier/:id" element={<TurnierDetail />} />
+        <Route path="/turnier/:id/beitreten" element={<TurnierBeitreten />} />
         <Route path="/rangliste" element={<Rangliste />} />
         <Route path="/runden" element={<MeineRunden />} />
         <Route path="/statistiken" element={<Statistiken />} />
         <Route path="/plaetze" element={<Plaetze />} />
         <Route path="/profil" element={<Profil nutzer={nutzer} />} />
-        <Route path="/turnier/:id" element={<TurnierDetail />} />
       </Routes>
     </BrowserRouter>
   )
