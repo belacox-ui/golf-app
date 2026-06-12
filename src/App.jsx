@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import TurnierErstellen from './pages/TurnierErstellen'
 import TurnierDetail from './pages/TurnierDetail'
 import TurnierBeitreten from './pages/TurnierBeitreten'
+import LiveScoring from './pages/LiveScoring'
 import './App.css'
 
 export function PageHeader({ titel, zurueck }) {
@@ -270,6 +271,7 @@ export default function App() {
         <Route path="/statistiken" element={<Statistiken />} />
         <Route path="/plaetze" element={<Plaetze />} />
         <Route path="/profil" element={<Profil nutzer={nutzer} />} />
+        <Route path="/turnier/:id/scoring" element={<LiveScoring />} />
       </Routes>
     </BrowserRouter>
   )
