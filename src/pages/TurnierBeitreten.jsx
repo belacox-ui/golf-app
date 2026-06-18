@@ -8,6 +8,7 @@ export default function TurnierBeitreten() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [turnier, setTurnier] = useState(null)
+  const [profil, setProfil] = useState(null)
   const [laden, setLaden] = useState(true)
   const [lgOptIn, setLgOptIn] = useState(false)
   const [beigetreten, setBeigetreten] = useState(false)
@@ -15,13 +16,17 @@ export default function TurnierBeitreten() {
 
   useEffect(() => {
     async function load() {
-      const snap = await getDoc(doc(db, 'turniere', id))
-      if (snap.exists()) {
-        const data = { id: snap.id, ...snap.data() }
+      const [turnierSnap, profilSnap] = await Promise.all([
+        getDoc(doc(db, 'turniere', id)),
+        getDoc(doc(db, 'spieler', auth.currentUser?.uid))
+      ])
+      if (turnierSnap.exists()) {
+        const data = { id: turnierSnap.id, ...turnierSnap.data() }
         setTurnier(data)
         const bereitsda = data.spieler?.some(s => s.uid === auth.currentUser?.uid)
         if (bereitsda) setBeigetreten(true)
       }
+      if (profilSnap.exists()) setProfil(profilSnap.data())
       setLaden(false)
     }
     load()
@@ -30,11 +35,17 @@ export default function TurnierBeitreten() {
   async function beitreten() {
     setFehler('')
     try {
+      const anzeigeName = profil
+        ? `${profil.vorname || ''} ${profil.nachname || ''}`.trim() || auth.currentUser.email
+        : auth.currentUser.displayName || auth.currentUser.email
+
       await updateDoc(doc(db, 'turniere', id), {
         spieler: arrayUnion({
           uid: auth.currentUser.uid,
-          name: auth.currentUser.displayName || auth.currentUser.email,
-          lgOptIn: turnier.loyalGambling ? lgOptIn : false
+          name: anzeigeName,
+          hcp: profil?.whi || 0,
+          lgOptIn: turnier.loyalGambling ? lgOptIn : false,
+          istGast: false
         })
       })
       navigate(`/turnier/${id}`)
@@ -47,6 +58,9 @@ export default function TurnierBeitreten() {
   if (!turnier) return <div className="page"><div className="empty-state"><h3>Turnier nicht gefunden</h3></div></div>
 
   const formatLabel = { stableford: 'Stableford', strokeplay: 'Strokeplay', scramble: 'Scramble' }
+  const anzeigeName = profil
+    ? `${profil.vorname || ''} ${profil.nachname || ''}`.trim() || auth.currentUser.email
+    : auth.currentUser.displayName || auth.currentUser.email
 
   return (
     <div className="page">
@@ -55,8 +69,8 @@ export default function TurnierBeitreten() {
 
         <div className="card">
           <div style={{fontSize: 22, fontWeight: 800, marginBottom: 4}}>{turnier.name}</div>
-          <div style={{color: 'var(--text-muted)', fontSize: 14, marginBottom: 12}}>
-            {turnier.datum} · {formatLabel[turnier.format]}
+          <div style={{color: 'var(--text-muted)', fontSize: 14, marginBottom: 8}}>
+            {turnier.datum || turnier.tage?.[0]?.datum} · {formatLabel[turnier.format]}
           </div>
           <div style={{fontSize: 14}}>{turnier.platzName}</div>
         </div>
@@ -74,35 +88,56 @@ export default function TurnierBeitreten() {
           </div>
         ) : (
           <>
+            {/* SPIELER INFO */}
+            <div className="card">
+              <div style={{fontSize: 12, color: 'var(--text-muted)', marginBottom: 4}}>
+                DU TRITTST BEI ALS
+              </div>
+              <div style={{fontWeight: 600, fontSize: 16, marginBottom: 4}}>{anzeigeName}</div>
+              {profil?.whi ? (
+                <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                  <span style={{fontSize: 14, color: 'var(--text-muted)'}}>WHI:</span>
+                  <span style={{
+                    background: 'var(--primary)', color: 'white',
+                    borderRadius: 20, padding: '2px 10px',
+                    fontSize: 14, fontWeight: 700
+                  }}>{profil.whi}</span>
+                </div>
+              ) : (
+                <div style={{fontSize: 13, color: 'var(--danger)'}}>
+                  ⚠️ Kein WHI im Profil — bitte zuerst im Profil eintragen!
+                </div>
+              )}
+            </div>
+
+            {/* L&G OPT-IN */}
             {turnier.loyalGambling && (
               <div className="card">
                 <div style={{fontWeight: 600, fontSize: 15, marginBottom: 4}}>
                   🎲 Loyal & Gambling
                 </div>
                 <div style={{fontSize: 13, color: 'var(--text-muted)', marginBottom: 16}}>
-                  Einsatz: {turnier.einsatz} € pro Spieler. Wer unter dem Cut liegt zahlt,
-                  wer darüber liegt bekommt 50% — 50% gehen an Charity.
+                  {turnier.einsatz} € pro Punkt × Anzahl Mitspieler.
+                  50% Auszahlung, 50% Charity.
                 </div>
                 <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
                   <span style={{fontWeight: 500}}>Ich nehme am Wettmodus teil</span>
                   <label className="toggle">
-                    <input type="checkbox" checked={lgOptIn} onChange={e => setLgOptIn(e.target.checked)} />
+                    <input type="checkbox" checked={lgOptIn}
+                      onChange={e => setLgOptIn(e.target.checked)} />
                     <span className="toggle-slider" />
                   </label>
                 </div>
               </div>
             )}
 
-            <div className="card">
-              <div style={{fontSize: 14, color: 'var(--text-muted)', marginBottom: 8}}>
-                Du trittst bei als:
-              </div>
-              <div style={{fontWeight: 600, fontSize: 16}}>
-                {auth.currentUser?.displayName || auth.currentUser?.email}
-              </div>
-            </div>
-
             {fehler && <div className="fehler">{fehler}</div>}
+
+            {!profil?.whi && (
+              <button className="btn-secondary" onClick={() => navigate('/profil')}>
+                → Zum Profil — WHI eintragen
+              </button>
+            )}
 
             <button className="btn-primary" onClick={beitreten}>
               Dem Turnier beitreten

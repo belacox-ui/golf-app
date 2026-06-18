@@ -1,13 +1,22 @@
 import { BrowserRouter, Routes, Route, NavLink, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { auth, db } from './firebase'
-import { onAuthStateChanged, signOut, updateProfile } from 'firebase/auth'
+import { onAuthStateChanged } from 'firebase/auth'
 import { collection, getDocs, orderBy, query } from 'firebase/firestore'
 import Login from './pages/Login'
 import TurnierErstellen from './pages/TurnierErstellen'
 import TurnierDetail from './pages/TurnierDetail'
 import TurnierBeitreten from './pages/TurnierBeitreten'
+import TurnierBearbeiten from './pages/TurnierBearbeiten'
+import TurnierErgebnis from './pages/TurnierErgebnis'
 import LiveScoring from './pages/LiveScoring'
+import Profil from './pages/Profil'
+import Freunde from './pages/Freunde'
+import RundeErstellen from './pages/RundeErstellen'
+import MeineRunden from './pages/MeineRunden'
+import RundeScoring from './pages/RundeScoring'
+import RundeDetail from './pages/RundeDetail'
+import RundeBearbeiten from './pages/RundeBearbeiten'
 import './App.css'
 
 export function PageHeader({ titel, zurueck }) {
@@ -25,22 +34,32 @@ export function PageHeader({ titel, zurueck }) {
 
 function Home({ nutzer }) {
   const navigate = useNavigate()
+  const [whi, setWhi] = useState('—')
   const anzeigeName = nutzer?.displayName || nutzer?.email?.split('@')[0] || '?'
   const initial = anzeigeName[0]?.toUpperCase() || '?'
+
+  useEffect(() => {
+    async function load() {
+      const { doc, getDoc } = await import('firebase/firestore')
+      const snap = await getDoc(doc(db, 'spieler', nutzer.uid))
+      if (snap.exists()) setWhi(snap.data().whi || '—')
+    }
+    load()
+  }, [nutzer.uid])
 
   return (
     <div className="page">
       <div className="home-hero">
         <div className="home-hero-top">
           <img src="/logo.jpg" alt="Logo" className="home-hero-logo" />
-          <div className="home-hcp">HCP –</div>
+          <div className="home-hcp">WHI {whi}</div>
         </div>
         <div className="home-avatar-circle">{initial}</div>
         <div className="home-name">{anzeigeName}</div>
         <div className="home-sub">Loyal & Gambling Society of Green Cap Golfers</div>
       </div>
-      <div style={{padding: '16px'}}>
-        <button className="btn-primary" onClick={() => navigate('/runde')}>
+      <div style={{padding: '16px 16px 8px'}}>
+        <button className="btn-primary" onClick={() => navigate('/runde/neu')}>
           Runde starten
         </button>
       </div>
@@ -50,24 +69,19 @@ function Home({ nutzer }) {
           <span className="menu-label">Turniere</span>
           <span className="menu-arrow">›</span>
         </div>
-        <div className="menu-item" onClick={() => navigate('/rangliste')}>
-          <span className="menu-icon">📊</span>
-          <span className="menu-label">Rangliste</span>
-          <span className="menu-arrow">›</span>
-        </div>
-        <div className="menu-item" onClick={() => navigate('/runden')}>
+        <div className="menu-item" onClick={() => navigate('/meine-runden')}>
           <span className="menu-icon">🏌️</span>
           <span className="menu-label">Meine Runden</span>
+          <span className="menu-arrow">›</span>
+        </div>
+        <div className="menu-item" onClick={() => navigate('/plaetze')}>
+          <span className="menu-icon">📍</span>
+          <span className="menu-label">Plaetze</span>
           <span className="menu-arrow">›</span>
         </div>
         <div className="menu-item" onClick={() => navigate('/statistiken')}>
           <span className="menu-icon">📈</span>
           <span className="menu-label">Statistiken</span>
-          <span className="menu-arrow">›</span>
-        </div>
-        <div className="menu-item" onClick={() => navigate('/plaetze')}>
-          <span className="menu-icon">📍</span>
-          <span className="menu-label">Plätze</span>
           <span className="menu-arrow">›</span>
         </div>
         <div className="menu-item" onClick={() => navigate('/profil')}>
@@ -84,6 +98,7 @@ function Turniere() {
   const navigate = useNavigate()
   const [turniere, setTurniere] = useState([])
   const [laden, setLaden] = useState(true)
+  const [filter, setFilter] = useState('alle')
 
   useEffect(() => {
     async function load() {
@@ -96,59 +111,64 @@ function Turniere() {
   }, [])
 
   const formatLabel = { stableford: 'Stableford', strokeplay: 'Strokeplay', scramble: 'Scramble' }
+  const uid = auth.currentUser?.uid
+  const typIcon = { standard: '🏌️', turnier: '🏆', turnier_lg: '🎲', open_reise: '✈️' }
+
+  const gefilterteTurniere = turniere.filter(t => {
+    const ichBin = t.spieler?.some(s => s.uid === uid)
+    if (filter === 'meine') return ichBin
+    if (filter === 'offen') return t.sichtbarkeit === 'oeffentlich' && !ichBin && t.status === 'offen'
+    return t.sichtbarkeit === 'oeffentlich' || ichBin
+  })
 
   return (
     <div className="page">
       <PageHeader titel="Turniere" zurueck="/" />
+      <div className="filter-tabs">
+        <button className={`filter-tab ${filter === 'alle' ? 'aktiv' : ''}`}
+          onClick={() => setFilter('alle')}>Alle</button>
+        <button className={`filter-tab ${filter === 'meine' ? 'aktiv' : ''}`}
+          onClick={() => setFilter('meine')}>Meine</button>
+        <button className={`filter-tab ${filter === 'offen' ? 'aktiv' : ''}`}
+          onClick={() => setFilter('offen')}>Beitreten</button>
+      </div>
       {laden ? (
-        <div className="empty-state"><p>Lädt...</p></div>
-      ) : turniere.length === 0 ? (
+        <div className="empty-state"><p>Laedt...</p></div>
+      ) : gefilterteTurniere.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">🏆</div>
-          <h3>Noch keine Turniere</h3>
-          <p>Erstelle ein Turnier und lade deine Freunde ein.</p>
+          <h3>{filter === 'offen' ? 'Keine offenen Turniere' : 'Noch keine Turniere'}</h3>
+          <p>{filter === 'offen'
+            ? 'Aktuell gibt es keine Turniere denen du beitreten kannst.'
+            : 'Erstelle ein Turnier und lade deine Freunde ein.'}</p>
         </div>
       ) : (
         <div className="card-list">
-          {turniere.map(t => (
-            <div key={t.id} className="list-item" onClick={() => navigate(`/turnier/${t.id}`)}>
-              <div className="list-icon">🏆</div>
-              <div className="list-body">
-                <div className="list-title">{t.name}</div>
-                <div className="list-sub">{t.datum} · {formatLabel[t.format]} · {t.spieler?.length || 0} Spieler</div>
+          {gefilterteTurniere.map(t => {
+            const ichBin = t.spieler?.some(s => s.uid === uid)
+            return (
+              <div key={t.id} className="list-item" onClick={() => navigate(`/turnier/${t.id}`)}>
+                <div className="list-icon">{typIcon[t.typ] || '🏆'}</div>
+                <div className="list-body">
+                  <div className="list-title">{t.name}</div>
+                  <div className="list-sub">
+                    {t.datum || t.tage?.[0]?.datum} · {formatLabel[t.format]} · {t.spieler?.length || 0} Spieler
+                  </div>
+                  <div style={{marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap'}}>
+                    {t.sichtbarkeit === 'oeffentlich' && <span className="badge badge-blue">Oeffentlich</span>}
+                    {t.loyalGambling && <span className="badge badge-amber">L&G</span>}
+                    {ichBin && <span className="badge badge-green">Dabei</span>}
+                  </div>
+                </div>
+                <span className={`badge ${t.status === 'offen' ? 'badge-green' : 'badge-amber'}`}>
+                  {t.status}
+                </span>
               </div>
-              <span className={`badge ${t.status === 'offen' ? 'badge-green' : 'badge-amber'}`}>{t.status}</span>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
       <button className="fab" onClick={() => navigate('/turnier-erstellen')}>+</button>
-    </div>
-  )
-}
-
-function Rangliste() {
-  return (
-    <div className="page">
-      <PageHeader titel="Rangliste" zurueck="/" />
-      <div className="empty-state">
-        <div className="empty-icon">📊</div>
-        <h3>Noch keine Einträge</h3>
-        <p>Spiele eine Runde um in der Rangliste zu erscheinen.</p>
-      </div>
-    </div>
-  )
-}
-
-function MeineRunden() {
-  return (
-    <div className="page">
-      <PageHeader titel="Meine Runden" zurueck="/" />
-      <div className="empty-state">
-        <div className="empty-icon">🏌️</div>
-        <h3>Noch keine Runden</h3>
-        <p>Starte deine erste Runde über den Home Screen.</p>
-      </div>
     </div>
   )
 }
@@ -176,7 +196,7 @@ function Plaetze() {
   ]
   return (
     <div className="page">
-      <PageHeader titel="Plätze" zurueck="/" />
+      <PageHeader titel="Plaetze" zurueck="/" />
       <div className="card-list">
         {plaetze.map(p => (
           <div key={p.id} className="list-item" onClick={() => navigate(`/platz/${p.id}`)}>
@@ -188,39 +208,6 @@ function Plaetze() {
             <span className="list-arrow">›</span>
           </div>
         ))}
-      </div>
-    </div>
-  )
-}
-
-function Profil({ nutzer }) {
-  const [name, setName] = useState(nutzer?.displayName || '')
-  const [gespeichert, setGespeichert] = useState(false)
-
-  async function nameSpeichern() {
-    await updateProfile(auth.currentUser, { displayName: name })
-    setGespeichert(true)
-    setTimeout(() => setGespeichert(false), 2000)
-  }
-
-  return (
-    <div className="page">
-      <PageHeader titel="Profil" zurueck="/" />
-      <div style={{padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px'}}>
-        <div className="card">
-          <div className="input-group">
-            <label className="input-label">Name</label>
-            <input className="input" value={name} onChange={e => setName(e.target.value)}
-              placeholder="Dein Name" />
-          </div>
-          <div style={{color: 'var(--text-muted)', fontSize: 13, marginBottom: 12}}>
-            {nutzer?.email}
-          </div>
-          <button className="btn-primary" onClick={nameSpeichern}>
-            {gespeichert ? '✓ Gespeichert' : 'Name speichern'}
-          </button>
-        </div>
-        <button className="btn-secondary" onClick={() => signOut(auth)}>Abmelden</button>
       </div>
     </div>
   )
@@ -246,9 +233,7 @@ export default function App() {
 
   if (!nutzer) {
     const ziel = window.location.pathname
-    if (ziel !== '/' && ziel !== '') {
-      sessionStorage.setItem('nachLogin', ziel)
-    }
+    if (ziel !== '/' && ziel !== '') sessionStorage.setItem('nachLogin', ziel)
     return <Login />
   }
 
@@ -257,22 +242,28 @@ export default function App() {
       <nav className="bottom-nav">
         <NavLink to="/"><span className="nav-icon">🏠</span>Home</NavLink>
         <NavLink to="/turniere"><span className="nav-icon">🏆</span>Turniere</NavLink>
-        <NavLink to="/rangliste"><span className="nav-icon">📊</span>Rangliste</NavLink>
+        <NavLink to="/meine-runden"><span className="nav-icon">🏌️</span>Runden</NavLink>
         <NavLink to="/profil"><span className="nav-icon">👤</span>Profil</NavLink>
       </nav>
-      <Routes>
+     <Routes>
         <Route path="/" element={<Home nutzer={nutzer} />} />
         <Route path="/turniere" element={<Turniere />} />
         <Route path="/turnier-erstellen" element={<TurnierErstellen />} />
         <Route path="/turnier/:id" element={<TurnierDetail />} />
         <Route path="/turnier/:id/beitreten" element={<TurnierBeitreten />} />
-        <Route path="/rangliste" element={<Rangliste />} />
-        <Route path="/runden" element={<MeineRunden />} />
+        <Route path="/turnier/:id/bearbeiten" element={<TurnierBearbeiten />} />
+        <Route path="/turnier/:id/scoring" element={<LiveScoring />} />
+        <Route path="/turnier/:id/ergebnis" element={<TurnierErgebnis />} />
+        <Route path="/meine-runden" element={<MeineRunden />} />
+        <Route path="/runde/neu" element={<RundeErstellen />} />
+        <Route path="/runde/:id" element={<RundeDetail />} />
+        <Route path="/runde/:id/scoring" element={<RundeScoring />} />
+        <Route path="/runde/:id/bearbeiten" element={<RundeBearbeiten />} />
         <Route path="/statistiken" element={<Statistiken />} />
         <Route path="/plaetze" element={<Plaetze />} />
         <Route path="/profil" element={<Profil nutzer={nutzer} />} />
-        <Route path="/turnier/:id/scoring" element={<LiveScoring />} />
-      </Routes>
+        <Route path="/freunde" element={<Freunde />} />
+        </Routes>
     </BrowserRouter>
   )
 }
