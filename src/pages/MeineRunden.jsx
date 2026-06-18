@@ -23,7 +23,7 @@ export default function MeineRunden() {
         orderBy('erstelltAm', 'desc')
       )
       const snap = await getDocs(q)
-      setRunden(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      setRunden(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => !r.istFlight))
     } catch (e) {
       console.log(e)
     }

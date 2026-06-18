@@ -27,28 +27,39 @@ export default function RundeErstellen() {
   const [gastWhi, setGastWhi] = useState('')
   const [gastFormOffen, setGastFormOffen] = useState(false)
 
-  useEffect(() => {
+useEffect(() => {
     async function load() {
       const snap = await getDoc(doc(db, 'spieler', auth.currentUser.uid))
       if (snap.exists()) {
         const d = snap.data()
         setFreunde(d.freunde || [])
         const name = `${d.vorname || ''} ${d.nachname || ''}`.trim() || auth.currentUser.email
-        setSpieler([{
-          id: auth.currentUser.uid,
-          name,
-          hcp: d.whi || 0,
-          istGast: false,
-          istIch: true
-        }])
+        
+        // Bei Flight: leere Liste, Ersteller muss sich selbst manuell hinzufügen
+        // Bei privater Runde: Ersteller automatisch dabei
+        if (!turnierId) {
+          setSpieler([{
+            id: auth.currentUser.uid,
+            name,
+            hcp: d.whi || 0,
+            istGast: false,
+            istIch: true
+          }])
+        } else {
+          setSpieler([]) // Flight: leer starten
+        }
       } else {
-        setSpieler([{
-          id: auth.currentUser.uid,
-          name: auth.currentUser.displayName || auth.currentUser.email,
-          hcp: 0,
-          istGast: false,
-          istIch: true
-        }])
+        if (!turnierId) {
+          setSpieler([{
+            id: auth.currentUser.uid,
+            name: auth.currentUser.displayName || auth.currentUser.email,
+            hcp: 0,
+            istGast: false,
+            istIch: true
+          }])
+        } else {
+          setSpieler([])
+        }
       }
     }
     load()
@@ -85,6 +96,7 @@ export default function RundeErstellen() {
   }
 
   async function rundeStarten() {
+    if (spieler.length === 0) { setFehler('Bitte mindestens einen Spieler hinzufügen.'); return }
     if (!platzId) { setFehler('Bitte einen Platz auswählen.'); return }
     setLaden(true)
     setFehler('')
@@ -110,6 +122,7 @@ export default function RundeErstellen() {
         turnierId,
         spieltagId,
         istFlight,
+        turnierName: searchParams.get('turnierName') || null,
         // Für spätere Abfrage "Runden wo ich Teilnehmer bin"
         teilnehmerIds
       })

@@ -150,6 +150,13 @@ export default function RundeDetail() {
       if (!snap.exists()) return navigate('/meine-runden')
       const data = { id: snap.id, ...snap.data() }
       setRunde(data)
+      if (data.istFlight && data.turnierId) {
+  const turnierSnap = await getDoc(doc(db, 'turniere', data.turnierId))
+  if (turnierSnap.exists()) {
+    data.turnierName = turnierSnap.data().name
+    setRunde({ ...data })
+  }
+}
       setPlatz(COURSES.find(c => c.id === data.platzId) || null)
       setLaden(false)
     }
@@ -180,7 +187,7 @@ export default function RundeDetail() {
 
   return (
     <div className="page">
-      <PageHeader titel={runde.platzName || 'Runde'} zurueck="/meine-runden" />
+      <PageHeader titel={runde.istFlight ? (runde.turnierName || 'Turnier') : (runde.platzName || 'Runde')} zurueck={runde.istFlight ? `/turnier/${runde.turnierId}` : '/meine-runden'} />
       <div className="page-content">
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
@@ -226,7 +233,7 @@ export default function RundeDetail() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8, paddingBottom: 20 }}>
           {istAktiv && (
             <button className="btn btn-primary" onClick={() => navigate(`/runde/${id}/scoring`)}>
-              🏌️ Scoring fortsetzen
+              {istAktiv && Object.keys(scores).length === 0 ? '🏌️ Scoring starten' : '🏌️ Scoring fortsetzen'}
             </button>
           )}
           {istEigner && istAktiv && (
