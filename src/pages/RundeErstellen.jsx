@@ -9,10 +9,10 @@ export default function RundeErstellen() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
-  // Optionale Turnier-Kontext Parameter (via URL: ?turnierId=X&spieltagId=Y)
   const turnierId = searchParams.get('turnierId') || null
   const spieltagId = searchParams.get('spieltagId') || null
   const istFlight = !!turnierId
+  const solo = searchParams.get('solo') === 'true'
 
   const [datum, setDatum] = useState(new Date().toISOString().split('T')[0])
   const [platzId, setPlatzId] = useState(searchParams.get('platzId') || '')
@@ -27,17 +27,15 @@ export default function RundeErstellen() {
   const [gastWhi, setGastWhi] = useState('')
   const [gastFormOffen, setGastFormOffen] = useState(false)
 
-useEffect(() => {
+  useEffect(() => {
     async function load() {
       const snap = await getDoc(doc(db, 'spieler', auth.currentUser.uid))
       if (snap.exists()) {
         const d = snap.data()
         setFreunde(d.freunde || [])
         const name = `${d.vorname || ''} ${d.nachname || ''}`.trim() || auth.currentUser.email
-        
-        // Bei Flight: leere Liste, Ersteller muss sich selbst manuell hinzufügen
-        // Bei privater Runde: Ersteller automatisch dabei
-        if (!turnierId) {
+
+        if (!turnierId || solo) {
           setSpieler([{
             id: auth.currentUser.uid,
             name,
@@ -46,10 +44,10 @@ useEffect(() => {
             istIch: true
           }])
         } else {
-          setSpieler([]) // Flight: leer starten
+          setSpieler([])
         }
       } else {
-        if (!turnierId) {
+        if (!turnierId || solo) {
           setSpieler([{
             id: auth.currentUser.uid,
             name: auth.currentUser.displayName || auth.currentUser.email,
@@ -69,7 +67,7 @@ useEffect(() => {
     if (spieler.length >= 4) return
     if (spieler.some(s => s.name === (freund.spitzname || freund.name))) return
     setSpieler([...spieler, {
-      id: freund.uid || ('freund_' + freund.id), // echte uid wenn verfügbar
+      id: freund.uid || ('freund_' + freund.id),
       name: freund.spitzname || freund.name,
       hcp: freund.whi || 0,
       istGast: false,
@@ -102,8 +100,6 @@ useEffect(() => {
     setFehler('')
     try {
       const platz = COURSES.find(c => c.id === platzId)
-
-      // Alle Spieler-IDs für schnelle Abfrage (Schritt 4: "wo bin ich Teilnehmer")
       const teilnehmerIds = spieler.map(s => s.id).filter(id => !id.startsWith('gast_'))
 
       const ref = await addDoc(collection(db, 'runden'), {
@@ -118,18 +114,15 @@ useEffect(() => {
         status: 'aktiv',
         spieler,
         scores: {},
-        // Turnier-Kontext (null wenn private Runde)
         turnierId,
         spieltagId,
         istFlight,
         turnierName: searchParams.get('turnierName') || null,
-        // Für spätere Abfrage "Runden wo ich Teilnehmer bin"
         teilnehmerIds
       })
 
-      // Bei Flight → zurück zum Turnier, sonst zum Scoring
       if (istFlight) {
-        navigate(`/turnier/${turnierId}`)
+        navigate(solo ? `/runde/${ref.id}/scoring` : `/turnier/${turnierId}`)
       } else {
         navigate(`/runde/${ref.id}/scoring`)
       }
@@ -146,18 +139,17 @@ useEffect(() => {
   return (
     <div className="page">
       <PageHeader
-        titel={istFlight ? 'Flight anlegen' : 'Runde starten'}
+        titel={istFlight ? (solo ? 'Meine Runde' : 'Flight anlegen') : 'Runde starten'}
         zurueck={istFlight ? `/turnier/${turnierId}` : '/'}
       />
       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
 
-        {/* Turnier-Kontext Banner */}
         {istFlight && (
           <div style={{
             background: '#dbeafe', borderRadius: 12, padding: '10px 14px',
             fontSize: 13, color: '#1d4ed8', fontWeight: 600
           }}>
-            🏆 Flight für Turnier — Scores fließen ins Leaderboard ein
+            {solo ? '🏆 Eigene Runde im Turnier — Score fließt ins Leaderboard ein' : '🏆 Flight für Turnier — Scores fließen ins Leaderboard ein'}
           </div>
         )}
 
@@ -167,7 +159,6 @@ useEffect(() => {
             onChange={e => setDatum(e.target.value)} />
         </div>
 
-        {/* Platz nur wählbar wenn keine Vorgabe vom Turnier */}
         <div className="input-group">
           <label className="input-label">Golfplatz *</label>
           <select className="input" value={platzId} onChange={e => setPlatzId(e.target.value)}
@@ -179,7 +170,6 @@ useEffect(() => {
           </select>
         </div>
 
-        {/* Format nur wählbar wenn keine Vorgabe vom Turnier */}
         {!istFlight && (
           <div className="input-group">
             <label className="input-label">Spielformat</label>
@@ -231,7 +221,7 @@ useEffect(() => {
 
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ fontWeight: 600, fontSize: 15 }}>
-            {istFlight ? 'Spieler im Flight' : 'Spieler'} ({spieler.length}/4)
+            {istFlight ? (solo ? 'Spieler' : 'Spieler im Flight') : 'Spieler'} ({spieler.length}/4)
           </div>
 
           {spieler.map(s => (
@@ -266,7 +256,7 @@ useEffect(() => {
             </div>
           ))}
 
-          {spieler.length < 4 && (
+          {!solo && spieler.length < 4 && (
             <>
               {verfuegbareFreunde.length > 0 && (
                 <div>
@@ -322,7 +312,7 @@ useEffect(() => {
         {fehler && <div className="fehler">{fehler}</div>}
 
         <button className="btn-primary" onClick={rundeStarten} disabled={laden || !platzId}>
-          {laden ? 'Wird gestartet...' : istFlight ? '🏌️ Flight starten' : 'Runde starten'}
+          {laden ? 'Wird gestartet...' : istFlight ? (solo ? 'Runde starten' : '✓ Flight speichern') : 'Runde starten'}
         </button>
 
       </div>

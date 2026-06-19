@@ -9,7 +9,7 @@ export default function TurnierDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [turnier, setTurnier] = useState(null)
-  const [flights, setFlights] = useState([]) // alle Runden mit turnierId = id
+  const [flights, setFlights] = useState([])
   const [laden, setLaden] = useState(true)
   const [freunde, setFreunde] = useState([])
   const [gastName, setGastName] = useState('')
@@ -18,13 +18,11 @@ export default function TurnierDetail() {
 
   useEffect(() => {
     async function load() {
-      // Turnier laden
       const snap = await getDoc(doc(db, 'turniere', id))
       if (!snap.exists()) { setLaden(false); return }
       const t = { id: snap.id, ...snap.data() }
       setTurnier(t)
 
-      // Alle Flights (Runden) zu diesem Turnier laden
       const flightQuery = query(
         collection(db, 'runden'),
         where('turnierId', '==', id)
@@ -32,7 +30,6 @@ export default function TurnierDetail() {
       const flightSnap = await getDocs(flightQuery)
       setFlights(flightSnap.docs.map(d => ({ id: d.id, ...d.data() })))
 
-      // Freundesliste laden
       const spielerSnap = await getDoc(doc(db, 'spieler', auth.currentUser.uid))
       if (spielerSnap.exists()) setFreunde(spielerSnap.data().freunde || [])
 
@@ -97,8 +94,8 @@ export default function TurnierDetail() {
   const ichBin = turnier.spieler?.find(s => s.uid === uid)
   const formatLabel = { stableford: 'Stableford', strokeplay: 'Strokeplay', scramble: 'Scramble' }
   const spieltage = turnier.spieltage || []
+  const modus = turnier.organisationsmodus || 'flights'
 
-  // Flights pro Spieltag gruppieren
   const flightsProSpieltag = (spieltagIdx) =>
     flights.filter(f => f.spieltagId === String(spieltagIdx))
 
@@ -111,17 +108,16 @@ export default function TurnierDetail() {
       <PageHeader titel={turnier.name} zurueck="/turniere" />
       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
-        {/* STATUS + FORMAT */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <span className={`badge ${turnier.status === 'offen' ? 'badge-green' : 'badge-gray'}`}>
             {turnier.status === 'offen' ? '● Offen' : '✓ Abgeschlossen'}
           </span>
           <span className="badge badge-blue">{formatLabel[turnier.format] || turnier.format}</span>
+          <span className="badge badge-gray">{modus === 'offen' ? '🙋 Offen' : '📋 Flights'}</span>
           {turnier.loyalGambling && <span className="badge badge-amber">🎲 L&G {turnier.einsatz}€</span>}
           {turnier.openWette && <span className="badge badge-blue">🎰 Open Wette</span>}
         </div>
 
-        {/* L&G INFO */}
         {turnier.loyalGambling && (
           <div style={{ background: '#fef3c7', borderRadius: 12, padding: '10px 14px' }}>
             <div style={{ fontWeight: 600, fontSize: 13, color: '#92400e' }}>
@@ -138,7 +134,6 @@ export default function TurnierDetail() {
           </div>
         )}
 
-        {/* MEIN L&G OPT-IN */}
         {turnier.loyalGambling && ichBin && turnier.status === 'offen' && (
           <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -156,8 +151,9 @@ export default function TurnierDetail() {
           </div>
         )}
 
-        {/* SPIELTAGE + FLIGHTS */}
-        <div style={{ fontWeight: 700, fontSize: 16, marginTop: 4 }}>Spieltage & Flights</div>
+        <div style={{ fontWeight: 700, fontSize: 16, marginTop: 4 }}>
+          Spieltage {modus === 'flights' ? '& Flights' : '& Runden'}
+        </div>
 
         {spieltage.length === 0 && (
           <div className="card" style={{ color: 'var(--text-muted)', fontSize: 14 }}>
@@ -168,9 +164,10 @@ export default function TurnierDetail() {
         {spieltage.map((tag, idx) => {
           const tagFlights = flightsProSpieltag(idx)
           const platz = COURSES.find(c => c.id === tag.platzId)
+          const ichHabeSchonRunde = tagFlights.some(f => f.spieler?.some(s => s.id === uid))
+
           return (
             <div key={idx} style={{ background: 'white', borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-              {/* Spieltag Header */}
               <div style={{ background: 'var(--primary)', color: 'white', padding: '12px 16px' }}>
                 <div style={{ fontWeight: 700, fontSize: 15 }}>
                   {spieltage.length > 1 ? `Tag ${idx + 1} — ` : ''}{tag.datum}
@@ -180,10 +177,11 @@ export default function TurnierDetail() {
                 </div>
               </div>
 
-              {/* Flights dieses Spieltags */}
               <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {tagFlights.length === 0 && (
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Noch keine Flights angelegt</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                    {modus === 'flights' ? 'Noch keine Flights angelegt' : 'Noch niemand hat gespielt'}
+                  </div>
                 )}
                 {tagFlights.map(f => {
                   const fertigeLocher = f.spieler?.reduce((sum, s) => {
@@ -199,7 +197,7 @@ export default function TurnierDetail() {
                       }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>
-                          Flight — {f.spieler?.map(s => s.name.split(' ')[0]).join(', ')}
+                          {f.spieler?.length === 1 ? f.spieler[0].name : `Flight — ${f.spieler?.map(s => s.name.split(' ')[0]).join(', ')}`}
                         </div>
                         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                           {f.spieler?.length} Spieler ·
@@ -214,8 +212,8 @@ export default function TurnierDetail() {
                   )
                 })}
 
-                {/* Flight anlegen Button */}
-                {istErsteller && turnier.status === 'offen' && (
+                {/* Flights-Modus: nur Ersteller legt Flights an */}
+                {modus === 'flights' && istErsteller && turnier.status === 'offen' && (
                   <button
                     onClick={() => navigate(`/runde/neu?turnierId=${id}&spieltagId=${idx}&platzId=${tag.platzId}&format=${turnier.format}&turnierName=${encodeURIComponent(turnier.name)}`)}
                     style={{
@@ -226,12 +224,24 @@ export default function TurnierDetail() {
                     + Flight anlegen
                   </button>
                 )}
+
+                {/* Offener Modus: jeder Teilnehmer startet seine eigene Runde */}
+                {modus === 'offen' && turnier.status === 'offen' && !ichHabeSchonRunde && (
+                  <button
+                    onClick={() => navigate(`/runde/neu?turnierId=${id}&spieltagId=${idx}&platzId=${tag.platzId}&format=${turnier.format}&turnierName=${encodeURIComponent(turnier.name)}&solo=true`)}
+                    style={{
+                      padding: '10px', borderRadius: 10, border: 'none',
+                      background: 'var(--primary)', color: 'white', fontWeight: 700,
+                      fontSize: 14, cursor: 'pointer', textAlign: 'center'
+                    }}>
+                    ▶ Meine Runde starten
+                  </button>
+                )}
               </div>
             </div>
           )
         })}
 
-        {/* SPIELER */}
         <div style={{ fontWeight: 700, fontSize: 16, marginTop: 4 }}>
           Teilnehmer ({turnier.spieler?.length || 0})
         </div>
@@ -276,7 +286,6 @@ export default function TurnierDetail() {
           ))}
         </div>
 
-        {/* Freunde + Gäste direkt hinzufügen */}
         {istErsteller && (
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ fontWeight: 600, fontSize: 14 }}>Teilnehmer hinzufügen</div>
@@ -318,7 +327,6 @@ export default function TurnierDetail() {
           </div>
         )}
 
-        {/* AKTIONEN */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4, paddingBottom: 20 }}>
           {istErsteller && (
             <button className="btn-secondary" onClick={() => navigate(`/turnier/${id}/bearbeiten`)}>

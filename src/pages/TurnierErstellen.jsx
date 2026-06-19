@@ -29,6 +29,7 @@ export default function TurnierErstellen() {
   const [format, setFormat] = useState('stableford')
   const [mitPlatzvorgabe, setMitPlatzvorgabe] = useState(true)
   const [sichtbarkeit, setSichtbarkeit] = useState('oeffentlich')
+  const [organisationsmodus, setOrganisationsmodus] = useState('offen')
   const [einsatz, setEinsatz] = useState('1')
   const [openWetteEinsatz, setOpenWetteEinsatz] = useState('10')
   const [oesterreicher, setOesterreicher] = useState('')
@@ -36,12 +37,10 @@ export default function TurnierErstellen() {
   const [laden, setLaden] = useState(false)
   const [fehler, setFehler] = useState('')
 
-  // Alle Turniertypen haben Spieltage — mindestens einer
   const [spieltage, setSpieltage] = useState([{ datum: '', platzId: '' }])
 
   const hatLG = typ === 'turnier_lg' || typ === 'open_reise'
   const istOpenReise = typ === 'open_reise'
-  const mehrtagig = spieltage.length > 1
 
   function spieltagHinzufuegen() {
     setSpieltage([...spieltage, { datum: '', platzId: '' }])
@@ -73,7 +72,6 @@ export default function TurnierErstellen() {
     try {
       const oesterreicherFinal = oesterreicher === 'custom' ? oesterreicherCustom : oesterreicher
 
-      // Spieltage mit Platznamen anreichern
       const spieltageMitName = spieltage.map(t => ({
         ...t,
         platzName: COURSES.find(c => c.id === t.platzId)?.name || ''
@@ -85,6 +83,7 @@ export default function TurnierErstellen() {
         format: istOpenReise ? 'stableford' : format,
         mitPlatzvorgabe,
         sichtbarkeit,
+        organisationsmodus,
         loyalGambling: hatLG,
         einsatz: hatLG ? parseInt(einsatz) : 0,
         openWette: istOpenReise,
@@ -94,9 +93,7 @@ export default function TurnierErstellen() {
         erstelltVonName: auth.currentUser.displayName || auth.currentUser.email,
         erstelltAm: serverTimestamp(),
         status: 'offen',
-        // Spieltage als Organisationsebene — Flights/Runden hängen dran
         spieltage: spieltageMitName,
-        // Kein scores-Objekt mehr — Scores leben in der runden Collection
         spieler: [{
           uid: auth.currentUser.uid,
           name: auth.currentUser.displayName || auth.currentUser.email,
@@ -119,7 +116,6 @@ export default function TurnierErstellen() {
       <PageHeader titel="Turnier erstellen" zurueck="/turniere" />
       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
 
-        {/* SCHRITT 1 — Turniertyp */}
         {schritt === 1 && (
           <>
             <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>
@@ -145,17 +141,14 @@ export default function TurnierErstellen() {
           </>
         )}
 
-        {/* SCHRITT 2 — Details */}
         {schritt === 2 && (
           <>
-            {/* Name */}
             <div className="input-group">
               <label className="input-label">Turniername *</label>
               <input className="input" placeholder="z.B. GreenCap Summer Open"
                 value={name} onChange={e => setName(e.target.value)} />
             </div>
 
-            {/* Sichtbarkeit */}
             <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ fontWeight: 600, fontSize: 15 }}>Sichtbarkeit</div>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -174,7 +167,28 @@ export default function TurnierErstellen() {
               </div>
             </div>
 
-            {/* Format + Platzvorgabe */}
+            {/* Organisationsmodus */}
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>Organisation</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: -4 }}>
+                Wie werden Teilnehmer eingeteilt?
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div className={`sicht-btn ${organisationsmodus === 'offen' ? 'aktiv' : ''}`}
+                  onClick={() => setOrganisationsmodus('offen')}>
+                  <div style={{ fontSize: 20 }}>🙋</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>Offen</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Jeder spielt eigene Runde</div>
+                </div>
+                <div className={`sicht-btn ${organisationsmodus === 'flights' ? 'aktiv' : ''}`}
+                  onClick={() => setOrganisationsmodus('flights')}>
+                  <div style={{ fontSize: 20 }}>📋</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>Flights</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Veranstalter teilt ein</div>
+                </div>
+              </div>
+            </div>
+
             {!istOpenReise && (
               <>
                 <div className="input-group">
@@ -203,7 +217,6 @@ export default function TurnierErstellen() {
               </>
             )}
 
-            {/* Spieltage — für ALLE Turniertypen */}
             <div style={{ fontWeight: 600, fontSize: 15 }}>
               Spieltage {spieltage.length > 1 ? `(${spieltage.length} Tage)` : ''}
             </div>
@@ -238,7 +251,6 @@ export default function TurnierErstellen() {
               + Weiteren Spieltag hinzufügen
             </button>
 
-            {/* L&G Einstellungen */}
             {hatLG && (
               <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ fontWeight: 600, fontSize: 15 }}>🎲 Loyal & Gambling</div>
@@ -256,7 +268,6 @@ export default function TurnierErstellen() {
               </div>
             )}
 
-            {/* Open Wette */}
             {istOpenReise && (
               <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ fontWeight: 600, fontSize: 15 }}>🎰 Open Wette</div>
